@@ -21,6 +21,7 @@
 
 import argparse
 import logging
+import os
 import socket
 import subprocess
 import sys
@@ -28,15 +29,34 @@ import sys
 import packetRead
 
 ##################### CONFIGURATION ##########################
-DEFAULT_CONF='~/.weenotifrc'
+DEFAULT_CONF=(os.path.expanduser("~"))+'/.weenotifrc'
 ##################### END CONFIGURATION ######################
 
+def expandPaths(path):
+    return os.path.expanduser(path)
+
+def safeCall(callArray):
+    if(len(callArray) == 0):
+        logging.error("Trying to call an unspecified external program.")
+        return
+    try:
+        subprocess.call(callArray)
+    except:
+        logging.error("Could not execute "+callArray[0])
+
 def gotHighlight(message, nick, conf):
-    if not 'action' in conf:
-        highlightProcessCmd = 'echo'
-    else:
-        highlightProcessCmd = conf['action']
-    subprocess.call([highlightProcessCmd, message, nick])
+    if not 'highlight-action' in conf or not conf['highlight-action']:
+        return # No action defined: do nothing.
+
+    highlightProcessCmd = expandPaths(conf['highlight-action'])
+    safeCall([highlightProcessCmd, message, nick])
+
+def gotPrivMsg(message, nick, conf):
+    if not 'privmsg-action' in conf or not conf['privmsg-action']:
+        return # No action defined: do nothing.
+
+    privmsgProcessCmd = expandPaths(conf['privmsg-action'])
+    safeCall([privmsgProcessCmd, message, nick])
 
 def getResponse(sock, conf):
     READ_AT_ONCE=4096
@@ -74,28 +94,74 @@ def getResponse(sock, conf):
     hdaData,body = packetRead.read_hda(body)
 
     for hda in hdaData:
-        print(hda)
+        msg=hda['message']
+        nick=""
+        for tag in hda['tags_array']:
+            if tag.startswith('nick_'):
+                nick = tag[5:]
+
         if hda['highlight'] > 0:
-            msg=hda['message']
-            nick=""
-            for tag in hda['tags_array']:
-                if tag.startswith('nick_'):
-                    nick = tag[5:]
             gotHighlight(msg, nick, conf)
+            continue
+        for tag in hda['tags_array']:
+            if tag.startswith('notify_'):
+                notifLevel = tag[7:]
+                if notifLevel == 'private':
+                    gotPrivMsg(msg, nick, conf)
+                    break
+
     return True
 
-def readConfig(path):
-    return dict() # TODO implement
+CONFIG_ITEMS = [
+    ('-c','config', 'Use the given configuration file.'),
+    ('-s','server', 'Address of the Weechat relay.'),
+    ('-p','port', 'Port of the Weechat relay.'),
+    ('-a','highlight-action', 'Program to invoke when highlighted.'),
+    ('','privmsg-action', 'Program to invoke when receiving a private message.'),
+    ('','log-file', 'Log file. If omitted, the logs will be directly printed.')
+    ]
+    
+def readConfig(path, createIfAbsent=False):
+    outDict = dict()
+    try:
+        with open(path,'r') as handle:
+            confOpts = [ x[1] for x in CONFIG_ITEMS ]
+            for line in handle:
+                if '#' in line:
+                    line = line[:line.index('#')].strip()
+                if(line == ''):
+                    continue
+
+                if '=' in line:
+                    eqPos = line.index('=')
+                    attr = line[:eqPos].strip()
+                    arg = line[eqPos+1:].strip()
+                    if(attr in confOpts): # Valid option
+                        outDict[attr] = arg
+                    else:
+                        logging.warning('Unknown option: '+attr+'.')
+            handle.close()
+    except FileNotFoundError:
+        if(createIfAbsent):
+            with open(path, 'x') as touchHandle:
+                pass
+        else:
+            logging.error("The configuration file '"+path+"' does not exists.")
+    except IOError:
+        logging.error("Could not read the configuration file at '"+path+"'.")
+    return outDict
+
 
 def readCommandLine():
     parser = argparse.ArgumentParser(description="WeeChat client to get "+\
         "highlight notifications from a distant bouncer.")
-    parser.add_argument('-c','--config')
-    parser.add_argument('-s','--server')
-    parser.add_argument('-p','--port')
-    parser.add_argument('-a','--action')
     parser.add_argument('-v', action='store_true')
-    parser.add_argument('--log-file')
+    for (shortOpt,longOpt,helpMsg) in CONFIG_ITEMS:
+        if shortOpt == '':
+            parser.add_argument('--'+longOpt, dest=longOpt, help=helpMsg)
+        else:
+            parser.add_argument(shortOpt, '--'+longOpt, dest=longOpt,\
+                help=helpMsg)
     parsed = parser.parse_args()
     
     parsedTable = vars(parsed)
@@ -110,17 +176,21 @@ def main():
         datefmt='%I:%M:%S')
 
     conf = readCommandLine()
-    if not('config' in conf):
-        conf.update(readConfig(DEFAULT_CONF))
+    if (not 'config' in conf) or (not conf['config']):
+        conf.update(readConfig(DEFAULT_CONF,True))
     
     if('v' in conf and conf['v']): # Verbose
         logging.basicConfig(level = logging.DEBUG)
     if('log-file' in conf):
         logging.basicConfig(filename=conf['log-file'])
 
+    if not 'server' in conf or not conf['server'] or\
+            not 'port' in conf or not conf['port']:
+        print("Missing argument(s): server address and/or port.")
+        exit(1)
 
     sock = socket.socket()
-    sock.connect(("localhost", 6667))
+    sock.connect((conf['server'], int(conf['port'])))
     sock.sendall(b'init compression=off\n')
     sock.sendall(b'sync *\n')
     while getResponse(sock,conf):
