@@ -25,6 +25,8 @@ import socket
 import subprocess
 import sys
 
+import packetRead
+
 ##################### CONFIGURATION ##########################
 DEFAULT_CONF='~/.weenotifrc'
 ##################### END CONFIGURATION ######################
@@ -43,33 +45,33 @@ def getResponse(sock, conf):
         return False # Connection closed
     
     if(len(sockBytes) < 5):
-        logger.warning("Packet shorter than 5 bytes received. Ignoring.")
+        logging.warning("Packet shorter than 5 bytes received. Ignoring.")
         return True
 
     if sockBytes[4] != 0:
-        logger.warning("Received compressed message. Ignoring.")
+        logging.warning("Received compressed message. Ignoring.")
         return True
     
-    mLen,_ = read_int(sockBytes)
+    mLen,_ = packetRead.read_int(sockBytes)
     lastPacket = sockBytes
     while(len(sockBytes) < mLen):
         if(len(lastPacket) < READ_AT_ONCE):
-            logger.warning("Incomplete packet received. Ignoring.")
+            logging.warning("Incomplete packet received. Ignoring.")
             return True
         lastPacket = sock.recv(READ_AT_ONCE)
         sockBytes += lastPacket
 
     body = sockBytes[5:]
-    ident,body = read_str(body)
+    ident,body = packetRead.read_str(body)
     if ident != "_buffer_line_added":
         return True
-    logger.debug("Received buffer line.")
+    logging.debug("Received buffer line.")
 
-    dataTyp,body = read_typ(body)
+    dataTyp,body = packetRead.read_typ(body)
     if(dataTyp != "hda"):
-        logger.warning("Unknown buffer_line_added format. Ignoring.")
+        logging.warning("Unknown buffer_line_added format. Ignoring.")
         return True
-    hdaData,body = read_hda(body)
+    hdaData,body = packetRead.read_hda(body)
 
     for hda in hdaData:
         print(hda)
