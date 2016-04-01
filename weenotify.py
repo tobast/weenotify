@@ -22,6 +22,7 @@
 import argparse
 import logging
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -40,7 +41,7 @@ def safeCall(callArray):
         logging.error("Trying to call an unspecified external program.")
         return
     try:
-        subprocess.call(callArray)
+        subprocess.call(callArray, True)
     except:
         logging.error("Could not execute "+callArray[0])
 
@@ -170,29 +171,37 @@ def readCommandLine():
 
     return parsedTable
 
+def sigint(sig, frame):
+    logging.info("Stopped.")
+    exit(0)
 
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',\
-        datefmt='%I:%M:%S')
+        datefmt='%H:%M:%S')
 
     conf = readCommandLine()
     if (not 'config' in conf) or (not conf['config']):
         conf.update(readConfig(DEFAULT_CONF,True))
     
-    if('v' in conf and conf['v']): # Verbose
-        logging.basicConfig(level = logging.DEBUG)
     if('log-file' in conf):
         logging.basicConfig(filename=conf['log-file'])
+    if('v' in conf and conf['v']): # Verbose
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.info("Verbose mode.")
 
     if not 'server' in conf or not conf['server'] or\
             not 'port' in conf or not conf['port']:
         print("Missing argument(s): server address and/or port.")
         exit(1)
 
+    signal.signal(signal.SIGINT, sigint)
+
     sock = socket.socket()
     sock.connect((conf['server'], int(conf['port'])))
+    logging.info("Connecting to "+conf['server']+":"+conf['port']+"...")
     sock.sendall(b'init compression=off\n')
     sock.sendall(b'sync *\n')
+    logging.info("Entering main loop.")
     while getResponse(sock,conf):
         pass
 
