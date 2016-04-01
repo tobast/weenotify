@@ -208,6 +208,13 @@ def main():
 
     if 'log-file' not in conf:
         conf['log-file']=None
+    if conf['log-file'] != None and not os.path.isfile(conf['log-file']):
+        try:
+            touchHandle = open(conf['log-file'],'x')
+            touchHandle.close()
+        except:
+            print("ERROR: failed to create log file. Exiting.")
+            exit(1)
 
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',\
         datefmt='%H:%M:%S', filename=conf['log-file'])
