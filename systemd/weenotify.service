@@ -1,0 +1,7 @@
+[Unit]
+Description=Weenotify - weechat notifications from a distant server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 [PATH_TO_WEENOTIFY.PY]
