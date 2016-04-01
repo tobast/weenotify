@@ -210,7 +210,7 @@ def main():
 
     if 'log-file' not in conf:
         conf['log-file']=None
-    else:
+    if conf['log-file'] != None:
         conf['log-file'] = expandPaths(conf['log-file'])
     if conf['log-file'] != None and not os.path.isfile(conf['log-file']):
         try:
