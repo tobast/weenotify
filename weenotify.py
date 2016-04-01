@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """
     WeeNotify
 
@@ -116,7 +117,7 @@ def getResponse(sock, conf):
     return True
 
 CONFIG_ITEMS = [
-    ('-c','config', 'Use the given configuration file.'),
+    ('-c','config', 'Use the given configuration file.', DEFAULT_CONF),
     ('-s','server', 'Address of the Weechat relay.'),
     ('-p','port', 'Port of the Weechat relay.'),
     ('','ensure-background', 'Runs the following command in the background.'+\
@@ -160,7 +161,6 @@ def readConfig(path, createIfAbsent=False):
         logging.error("Could not read the configuration file at '"+path+"'.")
     return outDict
 
-
 def readCommandLine():
     parser = argparse.ArgumentParser(description="WeeChat client to get "+\
         "highlight notifications from a distant bouncer.")
@@ -174,7 +174,7 @@ def readCommandLine():
                 default=dft)
         else:
             parser.add_argument(shortOpt, '--'+longOpt, dest=longOpt,\
-                help=helpMsg)
+                help=helpMsg, default=dft)
     parsed = parser.parse_args()
     
     parsedTable = vars(parsed)
@@ -206,9 +206,10 @@ def main():
         datefmt='%H:%M:%S')
 
     conf = readCommandLine()
-    if (not 'config' in conf) or (not conf['config']):
-        conf.update(readConfig(DEFAULT_CONF,True))
+    conf.update(readConfig(conf['config'],True))
+    #TODO command line prevails
     
+    logging.getLogger().setLevel(logging.INFO)
     if('log-file' in conf):
         logging.basicConfig(filename=conf['log-file'])
     if('v' in conf and conf['v']): # Verbose
