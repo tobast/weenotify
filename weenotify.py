@@ -185,10 +185,6 @@ def readCommandLine():
 
     return parsedTable
 
-def sigint(sig, frame):
-    logging.info("Stopped.")
-    exit(0)
-
 def ensureBackgroundCheckRun(proc,conf):
     """ Runs (or re-runs if it has terminated) the 'ensure-background'
         option command-line if it was specified. """
@@ -204,6 +200,13 @@ def ensureBackgroundCheckRun(proc,conf):
     return proc
 
 def main():
+    def sigint(sig, frame):
+        if(bgProcess != None):
+            bgProcess.terminate()
+            logging.info("Terminated background process.")
+        logging.info("Stopped.")
+        exit(0)
+
     conf = readCommandLine()
     conf.update(readConfig(conf['config'],True))
     #TODO command line prevails
