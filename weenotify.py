@@ -208,6 +208,8 @@ def main():
 
     if 'log-file' not in conf:
         conf['log-file']=None
+    else:
+        conf['log-file'] = expandPaths(conf['log-file'])
     if conf['log-file'] != None and not os.path.isfile(conf['log-file']):
         try:
             touchHandle = open(conf['log-file'],'x')
@@ -220,8 +222,6 @@ def main():
         datefmt='%H:%M:%S', filename=conf['log-file'])
     
     logging.getLogger().setLevel(logging.INFO)
-    if('log-file' in conf):
-        logging.basicConfig(filename=conf['log-file'])
     if('v' in conf and conf['v']): # Verbose
         logging.getLogger().setLevel(logging.DEBUG)
         logging.info("Verbose mode.")
