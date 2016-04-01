@@ -22,10 +22,12 @@
 import argparse
 import logging
 import os
+import shlex
 import signal
 import socket
 import subprocess
 import sys
+import time
 
 import packetRead
 
@@ -41,7 +43,7 @@ def safeCall(callArray):
         logging.error("Trying to call an unspecified external program.")
         return
     try:
-        subprocess.call(callArray, True)
+        subprocess.call(shlex.split(callArray[0])+callArray[1:])
     except:
         logging.error("Could not execute "+callArray[0])
 
@@ -117,6 +119,12 @@ CONFIG_ITEMS = [
     ('-c','config', 'Use the given configuration file.'),
     ('-s','server', 'Address of the Weechat relay.'),
     ('-p','port', 'Port of the Weechat relay.'),
+    ('','ensure-background', 'Runs the following command in the background.'+\
+        ' Periodically checks whether it is still open, reruns it if '+\
+        'necessary, and resets the connection to the server if it was lost '+\
+        'in the process. Mostly useful to establish a SSH tunnel.'),
+    ('','reconnect-delay','Delay between two attempts to reconnect after '+\
+        'being disconnected from the server.', '10'),
     ('-a','highlight-action', 'Program to invoke when highlighted.'),
     ('','privmsg-action', 'Program to invoke when receiving a private message.'),
     ('','log-file', 'Log file. If omitted, the logs will be directly printed.')
@@ -157,9 +165,13 @@ def readCommandLine():
     parser = argparse.ArgumentParser(description="WeeChat client to get "+\
         "highlight notifications from a distant bouncer.")
     parser.add_argument('-v', action='store_true')
-    for (shortOpt,longOpt,helpMsg) in CONFIG_ITEMS:
+    for cfgItem in CONFIG_ITEMS:
+        shortOpt,longOpt,helpMsg,dft = cfgItem[0],cfgItem[1],cfgItem[2],None
+        if len(cfgItem) >= 4:
+            dft = cfgItem[3]
         if shortOpt == '':
-            parser.add_argument('--'+longOpt, dest=longOpt, help=helpMsg)
+            parser.add_argument('--'+longOpt, dest=longOpt, help=helpMsg,\
+                default=dft)
         else:
             parser.add_argument(shortOpt, '--'+longOpt, dest=longOpt,\
                 help=helpMsg)
@@ -174,6 +186,20 @@ def readCommandLine():
 def sigint(sig, frame):
     logging.info("Stopped.")
     exit(0)
+
+def ensureBackgroundCheckRun(proc,conf):
+    """ Runs (or re-runs if it has terminated) the 'ensure-background'
+        option command-line if it was specified. """
+    if not 'ensure-background' in conf or not conf['ensure-background']:
+        return
+
+    if proc == None or proc.poll() != None: # Not started or terminated
+        if proc != None: # Proc has died.
+            logging.warning("Background process has died.")
+        logging.info("Starting background process...")
+        proc = subprocess.Popen(shlex.split(conf['ensure-background']))
+        time.sleep(0.5) # Wait a little to let it settle.
+    return proc
 
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',\
@@ -196,14 +222,27 @@ def main():
 
     signal.signal(signal.SIGINT, sigint)
 
-    sock = socket.socket()
-    sock.connect((conf['server'], int(conf['port'])))
-    logging.info("Connecting to "+conf['server']+":"+conf['port']+"...")
-    sock.sendall(b'init compression=off\n')
-    sock.sendall(b'sync *\n')
+    bgProcess = None
+
     logging.info("Entering main loop.")
-    while getResponse(sock,conf):
-        pass
+    while True:
+        try:
+            bgProcess = ensureBackgroundCheckRun(bgProcess, conf)
+            sock = socket.socket()
+            logging.info("Connecting to "+conf['server']+":"+conf['port']+"...")
+            sock.connect((conf['server'], int(conf['port'])))
+            logging.info("Connected")
+            sock.sendall(b'init compression=off\n')
+            sock.sendall(b'sync *\n')
+
+            while getResponse(sock,conf):
+                bgProcess = ensureBackgroundCheckRun(bgProcess, conf)
+            logging.warning("Connection lost. Retrying...")
+        except ConnectionRefusedError:
+            logging.error("Connection refused. Retrying...")
+        except socket.error as exn:
+            logging.error("Connection error: %s. Retrying..." % exn)
+        time.sleep(conf['reconnect-delay'])
 
 if __name__=='__main__':
     main()
