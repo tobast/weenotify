@@ -33,7 +33,7 @@ import time
 import packetRead
 
 ##################### CONFIGURATION ##########################
-DEFAULT_CONF=(os.path.expanduser("~"))+'/.weenotifrc'
+DEFAULT_CONF=(os.path.expanduser("~"))+'/.weenotifyrc'
 ##################### END CONFIGURATION ######################
 
 def expandPaths(path):
@@ -202,12 +202,15 @@ def ensureBackgroundCheckRun(proc,conf):
     return proc
 
 def main():
-    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',\
-        datefmt='%H:%M:%S')
-
     conf = readCommandLine()
     conf.update(readConfig(conf['config'],True))
     #TODO command line prevails
+
+    if 'log-file' not in conf:
+        conf['log-file']=None
+
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',\
+        datefmt='%H:%M:%S', filename=conf['log-file'])
     
     logging.getLogger().setLevel(logging.INFO)
     if('log-file' in conf):
