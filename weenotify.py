@@ -264,7 +264,7 @@ def main():
             logging.error("Connection refused. Retrying...")
         except socket.error as exn:
             logging.error("Connection error: %s. Retrying..." % exn)
-        time.sleep(conf['reconnect-delay'])
+        time.sleep(float(conf['reconnect-delay']))
 
 if __name__=='__main__':
     main()
