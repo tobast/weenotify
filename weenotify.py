@@ -52,6 +52,7 @@ def gotHighlight(message, nick, conf):
     if not 'highlight-action' in conf or not conf['highlight-action']:
         return # No action defined: do nothing.
 
+    logging.debug("Notifying highlight message.")
     highlightProcessCmd = expandPaths(conf['highlight-action'])
     safeCall([highlightProcessCmd, message, nick])
 
@@ -59,6 +60,7 @@ def gotPrivMsg(message, nick, conf):
     if not 'privmsg-action' in conf or not conf['privmsg-action']:
         return # No action defined: do nothing.
 
+    logging.debug("Notifying private message.")
     privmsgProcessCmd = expandPaths(conf['privmsg-action'])
     safeCall([privmsgProcessCmd, message, nick])
 
