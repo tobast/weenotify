@@ -222,6 +222,7 @@ def main():
         exit(1)
 
     signal.signal(signal.SIGINT, sigint)
+    signal.signal(signal.SIGTERM, sigint)
 
     bgProcess = None
 
