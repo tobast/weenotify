@@ -180,10 +180,15 @@ def readCommandLine():
     parsed = parser.parse_args()
     
     parsedTable = vars(parsed)
-    if(parsed.config != None):
-        parsedTable.update(readConfig(parsed.config))
 
     return parsedTable
+
+def dictUnion(d1,d2):
+    out = d1
+    for key in d2.keys():
+        if not(d2[key] == None and key in d1):
+            out[key] = d2[key]
+    return out
 
 def ensureBackgroundCheckRun(proc,conf):
     """ Runs (or re-runs if it has terminated) the 'ensure-background'
@@ -208,8 +213,8 @@ def main():
         exit(0)
 
     conf = readCommandLine()
-    conf.update(readConfig(conf['config'],True))
-    #TODO command line prevails
+    conf = dictUnion(readConfig(conf['config'],True), conf)
+        # command line prevails
 
     if 'log-file' not in conf:
         conf['log-file']=None
