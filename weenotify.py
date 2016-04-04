@@ -130,7 +130,8 @@ CONFIG_ITEMS = [
         'being disconnected from the server.', '10'),
     ('-a','highlight-action', 'Program to invoke when highlighted.'),
     ('','privmsg-action', 'Program to invoke when receiving a private message.'),
-    ('','log-file', 'Log file. If omitted, the logs will be directly printed.')
+    ('','log-file', 'Log file. If omitted, the logs will be directly printed.'),
+    ('','password', 'Relay password')
     ]
     
 def readConfig(path, createIfAbsent=False):
@@ -254,7 +255,11 @@ def main():
             logging.info("Connecting to "+conf['server']+":"+conf['port']+"...")
             sock.connect((conf['server'], int(conf['port'])))
             logging.info("Connected")
-            sock.sendall(b'init compression=off\n')
+            password = conf.get('password', None)
+            if password != None:
+                sock.sendall(b'init compression=off,password='+password.encode("utf-8")+b'\n')
+            else:
+                sock.sendall(b'init compression=off\n')
             sock.sendall(b'sync *\n')
 
             while getResponse(sock,conf):
