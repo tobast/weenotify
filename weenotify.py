@@ -29,6 +29,7 @@ import socket
 import subprocess
 import sys
 import time
+import threading
 
 import packetRead
 
@@ -48,75 +49,143 @@ def safeCall(callArray):
     except:
         logging.error("Could not execute "+callArray[0])
 
-def gotHighlight(message, nick, conf):
-    if not 'highlight-action' in conf or not conf['highlight-action']:
-        return # No action defined: do nothing.
+class RelayClient(threading.Thread):
+    def __init__(self, conf):
+        threading.Thread.__init__(self)
+        self.daemon = True # Stop when the program terminates
+        self.conf = conf
+        self.sock = None
+        self.packet_actions = {
+            'ask_buffers' : self.asked_buffers,
+            '_buffer_line_added' : self.buffer_line_added
+        }
+        self.buffers = {}
 
-    logging.debug("Notifying highlight message.")
-    highlightProcessCmd = expandPaths(conf['highlight-action'])
-    safeCall([highlightProcessCmd, message, nick])
+    def run(self):
+        self.connect()
+        while True:
+            READ_AT_ONCE = 4096
+            data = self.recv(READ_AT_ONCE)
+            if len(data) < 5:
+                logging.warning("Packet shorter than 5 bytes received. Ignoring.")
+                continue
 
-def gotPrivMsg(message, nick, conf):
-    if not 'privmsg-action' in conf or not conf['privmsg-action']:
-        return # No action defined: do nothing.
-
-    logging.debug("Notifying private message.")
-    privmsgProcessCmd = expandPaths(conf['privmsg-action'])
-    safeCall([privmsgProcessCmd, message, nick])
-
-def getResponse(sock, conf):
-    READ_AT_ONCE=4096
-    sockBytes = sock.recv(READ_AT_ONCE)
-    if not sockBytes:
-        return False # Connection closed
-    
-    if(len(sockBytes) < 5):
-        logging.warning("Packet shorter than 5 bytes received. Ignoring.")
-        return True
-
-    if sockBytes[4] != 0:
-        logging.warning("Received compressed message. Ignoring.")
-        return True
-    
-    mLen,_ = packetRead.read_int(sockBytes)
-    lastPacket = sockBytes
-    while(len(sockBytes) < mLen):
-        if(len(lastPacket) < READ_AT_ONCE):
-            logging.warning("Incomplete packet received. Ignoring.")
-            return True
-        lastPacket = sock.recv(READ_AT_ONCE)
-        sockBytes += lastPacket
-
-    body = sockBytes[5:]
-    ident,body = packetRead.read_str(body)
-    if ident != "_buffer_line_added":
-        return True
-    logging.debug("Received buffer line.")
-
-    dataTyp,body = packetRead.read_typ(body)
-    if(dataTyp != "hda"):
-        logging.warning("Unknown buffer_line_added format. Ignoring.")
-        return True
-    hdaData,body = packetRead.read_hda(body)
-
-    for hda in hdaData:
-        msg=hda['message']
-        nick=""
-        for tag in hda['tags_array']:
-            if tag.startswith('nick_'):
-                nick = tag[5:]
-
-        if hda['highlight'] > 0:
-            gotHighlight(msg, nick, conf)
-            continue
-        for tag in hda['tags_array']:
-            if tag.startswith('notify_'):
-                notifLevel = tag[7:]
-                if notifLevel == 'private':
-                    gotPrivMsg(msg, nick, conf)
+            dataLen, _ = packetRead.read_int(data)
+            lastPacket = data
+            while len(data) < dataLen:
+                if len(lastPacket) < READ_AT_ONCE:
+                    logging.warning("Incomplete packet received. Ignoring.")
                     break
+                lastPacket = self.recv(READ_AT_ONCE)
+                data += lastPacket
+            if len(data) < dataLen:
+                continue
+            self.process_packet(data)
 
-    return True
+    def process_packet(self, packet):
+        if packet[4] != 0:
+            logging.warning("Received compressed message. Ignoring.")
+            return
+        body = packet[5:]
+        ident, body = packetRead.read_str(body)
+        if ident in self.packet_actions:
+            self.packet_actions[ident](body)
+
+    def connect(self):
+        while True:
+            try:
+                self.sock = socket.socket()
+                logging.info("Connecting to " + self.conf['server'] + ":" + self.conf['port'] + "...")
+                self.sock.connect((self.conf['server'], int(self.conf['port'])))
+                logging.info("Connected")
+                self.init_connection()
+                return
+            except ConnectionRefusedError:
+                self.sock = None
+                logging.error("Connection refused. Retrying...")
+            except socket.error as exn:
+                self.sock = None
+                logging.error("Connection error: %s. Retrying..." % exn)
+            time.sleep(float(self.conf['reconnect-delay']))
+
+    def init_connection(self):
+        password = self.conf.get('password', None)
+        if password != None:
+            self.sock.sendall(b'init compression=off,password='+password.encode("utf-8")+b'\n')
+        else:
+            self.sock.sendall(b'init compression=off\n')
+        self.sock.sendall(b'sync *\n')
+        # Ask for name of buffers
+        self.sock.sendall(b'(ask_buffers) hdata buffer:gui_buffers(*) name\n')
+
+    def recv(self, n):
+        while True:
+            try:
+                data = self.sock.recv(n)
+                if data:
+                    return data
+                logging.warning("Connection lost. Retrying...")
+            except socked.error as exn:
+                logging.error("Connection error: %s. Retrying..." % exn)
+            self.connect()
+
+    def asked_buffers(self, body):
+        data_type, body = packetRead.read_typ(body)
+        if(data_type != "hda"):
+            logging.warning("Unknown asked_buffers format. Ignoring.")
+            return
+        hdaData, _ = packetRead.read_hda(body)
+        for hda in hdaData:
+            self.buffers[hda['__path'][-1]] = hda['name']
+
+    def buffer_line_added(self, body):
+        data_type, body = packetRead.read_typ(body)
+        if(data_type != "hda"):
+            logging.warning("Unknown buffer_line_added format. Ignoring.")
+            return
+        hdaData, _ = packetRead.read_hda(body)
+        for hda in hdaData:
+            msg = hda['message']
+            buffer = hda.get('buffer', 0)
+            if buffer not in self.buffers:
+                self.sock.sendall(b'(ask_buffers) hdata buffer:gui_buffers(*) name\n')
+                buffer_name = '<unknown>'
+            else:
+                buffer_name = self.buffers[buffer]
+
+            nick = ""
+        
+            for tag in hda['tags_array']:
+                if tag.startswith('nick_'):
+                    nick = tag[5:]
+
+            if hda['highlight'] > 0:
+                self.gotHighlight(msg, nick, buffer_name)
+                continue
+
+            for tag in hda['tags_array']:
+                if tag.startswith('notify_'):
+                    notifLevel = tag[7:]
+                    if notifLevel == 'private':
+                        self.gotPrivMsg(msg, nick, buffer_name)
+                        break
+
+    def gotHighlight(self, message, nick, buffer_name):
+        if not selt.conf.get('highlight-action', None):
+            return # No action defined: do nothing.
+
+        logging.debug("Notifying highlight message.")
+        highlightProcessCmd = expandPaths(self.conf['highlight-action'])
+        safeCall([highlightProcessCmd, message, nick, buffer_name])
+
+    def gotPrivMsg(self, message, nick, buffer_name):
+        if not self.conf.get('privmsg-action', None):
+            return # No action defined: do nothing.
+
+        logging.debug("Notifying private message.")
+        privmsgProcessCmd = expandPaths(self.conf['privmsg-action'])
+        safeCall([privmsgProcessCmd, message, nick, buffer_name])
+
 
 CONFIG_ITEMS = [
     ('-c','config', 'Use the given configuration file.', DEFAULT_CONF),
@@ -245,31 +314,14 @@ def main():
     signal.signal(signal.SIGINT, sigint)
     signal.signal(signal.SIGTERM, sigint)
 
-    bgProcess = None
+    client = RelayClient(conf)
+    bgProcess = ensureBackgroundCheckRun(None, conf)
 
     logging.info("Entering main loop.")
+    client.start()
     while True:
-        try:
-            bgProcess = ensureBackgroundCheckRun(bgProcess, conf)
-            sock = socket.socket()
-            logging.info("Connecting to "+conf['server']+":"+conf['port']+"...")
-            sock.connect((conf['server'], int(conf['port'])))
-            logging.info("Connected")
-            password = conf.get('password', None)
-            if password != None:
-                sock.sendall(b'init compression=off,password='+password.encode("utf-8")+b'\n')
-            else:
-                sock.sendall(b'init compression=off\n')
-            sock.sendall(b'sync *\n')
-
-            while getResponse(sock,conf):
-                bgProcess = ensureBackgroundCheckRun(bgProcess, conf)
-            logging.warning("Connection lost. Retrying...")
-        except ConnectionRefusedError:
-            logging.error("Connection refused. Retrying...")
-        except socket.error as exn:
-            logging.error("Connection error: %s. Retrying..." % exn)
-        time.sleep(float(conf['reconnect-delay']))
+        bgProcess = ensureBackgroundCheckRun(bgProcess, conf)
+        time.sleep(0.5)
 
 if __name__=='__main__':
     main()

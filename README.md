@@ -23,7 +23,7 @@ Each of these options can be passed, prefixed with `--`, directly through the co
 * `port`: port of the Weechat relay.
 * `ensure-background`: runs the following command in the background. Periodically checks whether it is still open, reruns it if necessary, and resets the connection to the server if it was lost in the process. Mostly useful to establish a SSH tunnel: eg., to ensure that a SSH tunnel will be opened and closed with the application, set `ensure-background` to `ssh irc@example.com -L [LOCALPORT]:localhost:[RELAYPORT] -N`.
 * `reconnect-delay`: delay between two attempts to reconnect after being disconnected from the server.
-* `highlight-action`: program to invoke when highlighted. It will be called with the IRC line that triggered the highlight as its first argument and the message sender as its second argument.
+* `highlight-action`: program to invoke when highlighted. It will be called with the IRC line that triggered the highlight as its first argument, the message sender as its second argument, and the buffer name as its third.
 * `privmsg-action`:  program to invoke when receiving a private message. Has the same behavior as `highlight-action`.
 * `log-file`: log file path. If omitted, the logs will be directly printed.
 

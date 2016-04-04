@@ -34,7 +34,8 @@ def read_str(data):
 
 def read_ptr(data):
     ptrLen = data[0]
-    return 0,data[ptrLen+1:] # FIXME not implemented. Do we need it?
+    ptrData = data[1:ptrLen+1]
+    return int(ptrData.decode('utf-8'), 16), data[ptrLen+1:]
 
 def read_tim(data):
     timLen = data[0]
@@ -73,8 +74,11 @@ def read_hda(data):
     out = []
     for dataSet in range(count):
         curSet = dict()
+        path = []
         for k in range(len(hpathSplit)):
-            _,data = read_ptr(data)
+            ptr, data = read_ptr(data)
+            path.append(ptr)
+        curSet['__path'] = path
         for pair in keysArray:
             curSet[pair[0]],data = pair[1](data)
         out.append(curSet)
