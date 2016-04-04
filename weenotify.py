@@ -171,7 +171,7 @@ class RelayClient(threading.Thread):
                         break
 
     def gotHighlight(self, message, nick, buffer_name):
-        if not selt.conf.get('highlight-action', None):
+        if not self.conf.get('highlight-action', None):
             return # No action defined: do nothing.
 
         logging.debug("Notifying highlight message.")
