@@ -1,5 +1,5 @@
 [Unit]
-Description=Weenotify - weechat notifications from a distant server
+Description=Weenotify — weechat notifications from a distant server
 After=network.target
 
 [Service]
