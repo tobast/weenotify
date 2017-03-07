@@ -27,18 +27,19 @@ import shlex
 import signal
 import socket
 import subprocess
-import sys
 import time
 import threading
 
 import packetRead
 
-##################### CONFIGURATION ##########################
-DEFAULT_CONF=(os.path.expanduser("~"))+'/.weenotifyrc'
-##################### END CONFIGURATION ######################
+''' ================= CONFIGURATION ========================== '''
+DEFAULT_CONF = (os.path.expanduser("~"))+'/.weenotifyrc'
+''' ================= END CONFIGURATION ====================== '''
+
 
 def expandPaths(path):
     return os.path.expanduser(path)
+
 
 def safeCall(callArray):
     if(len(callArray) == 0):
@@ -49,15 +50,16 @@ def safeCall(callArray):
     except:
         logging.error("Could not execute "+callArray[0])
 
+
 class RelayClient(threading.Thread):
     def __init__(self, conf):
         threading.Thread.__init__(self)
-        self.daemon = True # Stop when the program terminates
+        self.daemon = True  # Stop when the program terminates
         self.conf = conf
         self.sock = None
         self.packet_actions = {
-            'ask_buffers' : self.asked_buffers,
-            '_buffer_line_added' : self.buffer_line_added
+            'ask_buffers': self.asked_buffers,
+            '_buffer_line_added': self.buffer_line_added
         }
         self.buffers = {}
 
@@ -67,7 +69,8 @@ class RelayClient(threading.Thread):
             READ_AT_ONCE = 4096
             data = self.recv(READ_AT_ONCE)
             if len(data) < 5:
-                logging.warning("Packet shorter than 5 bytes received. Ignoring.")
+                logging.warning("Packet shorter than 5 bytes received. "
+                                "Ignoring.")
                 continue
 
             dataLen, _ = packetRead.read_int(data)
@@ -95,8 +98,10 @@ class RelayClient(threading.Thread):
         while True:
             try:
                 self.sock = socket.socket()
-                logging.info("Connecting to " + self.conf['server'] + ":" + self.conf['port'] + "...")
-                self.sock.connect((self.conf['server'], int(self.conf['port'])))
+                logging.info("Connecting to {}:{}...".format(
+                    self.conf['server'], self.conf['port']))
+                self.sock.connect((self.conf['server'],
+                                   int(self.conf['port'])))
                 logging.info("Connected")
                 self.init_connection()
                 return
@@ -110,8 +115,10 @@ class RelayClient(threading.Thread):
 
     def init_connection(self):
         password = self.conf.get('password', None)
-        if password != None:
-            self.sock.sendall(b'init compression=off,password='+password.encode("utf-8")+b'\n')
+        if password is not None:
+            self.sock.sendall(
+                'init compression=off,password={}\n'.format(password)
+                .encode('utf-8'))
         else:
             self.sock.sendall(b'init compression=off\n')
         self.sock.sendall(b'sync *\n')
@@ -125,7 +132,7 @@ class RelayClient(threading.Thread):
                 if data:
                     return data
                 logging.warning("Connection lost. Retrying...")
-            except socked.error as exn:
+            except socket.error as exn:
                 logging.error("Connection error: %s. Retrying..." % exn)
             self.connect()
 
@@ -148,13 +155,14 @@ class RelayClient(threading.Thread):
             msg = hda['message']
             buffer = hda.get('buffer', 0)
             if buffer not in self.buffers:
-                self.sock.sendall(b'(ask_buffers) hdata buffer:gui_buffers(*) name\n')
+                self.sock.sendall(
+                    b'(ask_buffers) hdata buffer:gui_buffers(*) name\n')
                 buffer_name = '<unknown>'
             else:
                 buffer_name = self.buffers[buffer]
 
             nick = ""
-        
+
             for tag in hda['tags_array']:
                 if tag.startswith('nick_'):
                     nick = tag[5:]
@@ -172,7 +180,7 @@ class RelayClient(threading.Thread):
 
     def gotHighlight(self, message, nick, buffer_name):
         if not self.conf.get('highlight-action', None):
-            return # No action defined: do nothing.
+            return  # No action defined: do nothing.
 
         logging.debug("Notifying highlight message.")
         highlightProcessCmd = expandPaths(self.conf['highlight-action'])
@@ -180,7 +188,7 @@ class RelayClient(threading.Thread):
 
     def gotPrivMsg(self, message, nick, buffer_name):
         if not self.conf.get('privmsg-action', None):
-            return # No action defined: do nothing.
+            return  # No action defined: do nothing.
 
         logging.debug("Notifying private message.")
         privmsgProcessCmd = expandPaths(self.conf['privmsg-action'])
@@ -188,26 +196,29 @@ class RelayClient(threading.Thread):
 
 
 CONFIG_ITEMS = [
-    ('-c','config', 'Use the given configuration file.', DEFAULT_CONF),
-    ('-s','server', 'Address of the Weechat relay.'),
-    ('-p','port', 'Port of the Weechat relay.'),
-    ('','ensure-background', 'Runs the following command in the background.'+\
-        ' Periodically checks whether it is still open, reruns it if '+\
-        'necessary, and resets the connection to the server if it was lost '+\
+    ('-c', 'config', 'Use the given configuration file.', DEFAULT_CONF),
+    ('-s', 'server', 'Address of the Weechat relay.'),
+    ('-p', 'port', 'Port of the Weechat relay.'),
+    ('', 'ensure-background', 'Runs the following command in the background. '
+        'Periodically checks whether it is still open, reruns it if '
+        'necessary, and resets the connection to the server if it was lost '
         'in the process. Mostly useful to establish a SSH tunnel.'),
-    ('','reconnect-delay','Delay between two attempts to reconnect after '+\
+    ('', 'reconnect-delay', 'Delay between two attempts to reconnect after '
         'being disconnected from the server.', '10'),
-    ('-a','highlight-action', 'Program to invoke when highlighted.'),
-    ('','privmsg-action', 'Program to invoke when receiving a private message.'),
-    ('','log-file', 'Log file. If omitted, the logs will be directly printed.'),
-    ('','password', 'Relay password')
+    ('-a', 'highlight-action', 'Program to invoke when highlighted.'),
+    ('', 'privmsg-action', 'Program to invoke when receiving a private '
+        'message.'),
+    ('', 'log-file', 'Log file. If omitted, the logs will be directly '
+        'printed.'),
+    ('', 'password', 'Relay password')
     ]
-    
+
+
 def readConfig(path, createIfAbsent=False):
     outDict = dict()
     try:
-        with open(path,'r') as handle:
-            confOpts = [ x[1] for x in CONFIG_ITEMS ]
+        with open(path, 'r') as handle:
+            confOpts = [x[1] for x in CONFIG_ITEMS]
             for line in handle:
                 if '#' in line:
                     line = line[:line.index('#')].strip()
@@ -218,96 +229,108 @@ def readConfig(path, createIfAbsent=False):
                     eqPos = line.index('=')
                     attr = line[:eqPos].strip()
                     arg = line[eqPos+1:].strip()
-                    if(attr in confOpts): # Valid option
+                    if(attr in confOpts):  # Valid option
                         outDict[attr] = arg
                     else:
                         logging.warning('Unknown option: '+attr+'.')
             handle.close()
     except FileNotFoundError:
         if(createIfAbsent):
-            with open(path, 'x') as touchHandle:
-                pass
+            try:
+                open(path, 'x')
+            except FileExistsError:
+                pass  # That should not happen, but whatever.
+            except OSError as exn:
+                logging.error("Could not create {}: {}.".format(
+                    path, exn))
         else:
             logging.error("The configuration file '"+path+"' does not exists.")
     except IOError:
         logging.error("Could not read the configuration file at '"+path+"'.")
     return outDict
 
+
 def readCommandLine():
-    parser = argparse.ArgumentParser(description="WeeChat client to get "+\
-        "highlight notifications from a distant bouncer.")
+    parser = argparse.ArgumentParser(
+        description="WeeChat client to get highlight notifications from a "
+        "distant bouncer.")
     parser.add_argument('-v', action='store_true')
     for cfgItem in CONFIG_ITEMS:
-        shortOpt,longOpt,helpMsg,dft = cfgItem[0],cfgItem[1],cfgItem[2],None
+        shortOpt, longOpt, helpMsg, dft = \
+            cfgItem[0], cfgItem[1], cfgItem[2], None
+
         if len(cfgItem) >= 4:
             dft = cfgItem[3]
         if shortOpt == '':
-            parser.add_argument('--'+longOpt, dest=longOpt, help=helpMsg,\
-                default=dft)
+            parser.add_argument('--'+longOpt, dest=longOpt, help=helpMsg,
+                                default=dft)
         else:
-            parser.add_argument(shortOpt, '--'+longOpt, dest=longOpt,\
-                help=helpMsg, default=dft)
+            parser.add_argument(shortOpt, '--'+longOpt, dest=longOpt,
+                                help=helpMsg, default=dft)
     parsed = parser.parse_args()
-    
+
     parsedTable = vars(parsed)
 
     return parsedTable
 
-def dictUnion(d1,d2):
+
+def dictUnion(d1, d2):
     out = d1
     for key in d2.keys():
-        if not(d2[key] == None and key in d1):
+        if d2[key] is not None or key not in d1:
             out[key] = d2[key]
     return out
 
-def ensureBackgroundCheckRun(proc,conf):
+
+def ensureBackgroundCheckRun(proc, conf):
     """ Runs (or re-runs if it has terminated) the 'ensure-background'
         option command-line if it was specified. """
-    if not 'ensure-background' in conf or not conf['ensure-background']:
+    if 'ensure-background' not in conf or not conf['ensure-background']:
         return
 
-    if proc == None or proc.poll() != None: # Not started or terminated
-        if proc != None: # Proc has died.
+    if proc is None or proc.poll() is not None:  # Not started or terminated
+        if proc is not None:  # Proc has died.
             logging.warning("Background process has died.")
         logging.info("Starting background process...")
         proc = subprocess.Popen(shlex.split(conf['ensure-background']))
-        time.sleep(0.5) # Wait a little to let it settle.
+        time.sleep(0.5)  # Wait a little to let it settle.
     return proc
+
 
 def main():
     def sigint(sig, frame):
-        if(bgProcess != None):
+        if bgProcess is not None:
             bgProcess.terminate()
             logging.info("Terminated background process.")
         logging.info("Stopped.")
         exit(0)
 
+    # command line prevails
     conf = readCommandLine()
-    conf = dictUnion(readConfig(conf['config'],True), conf)
-        # command line prevails
+    conf = dictUnion(readConfig(conf['config'], True), conf)
 
     if 'log-file' not in conf:
-        conf['log-file']=None
-    if conf['log-file'] != None:
+        conf['log-file'] = None
+    if conf['log-file'] is not None:
         conf['log-file'] = expandPaths(conf['log-file'])
-    if conf['log-file'] != None and not os.path.isfile(conf['log-file']):
+    if conf['log-file'] is not None and not os.path.isfile(conf['log-file']):
         try:
-            touchHandle = open(conf['log-file'],'x')
+            touchHandle = open(conf['log-file'], 'x')
             touchHandle.close()
         except:
             print("ERROR: failed to create log file. Exiting.")
             exit(1)
 
-    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',\
-        datefmt='%H:%M:%S', filename=conf['log-file'])
-    
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
+                        datefmt='%H:%M:%S', filename=conf['log-file'])
+
     logging.getLogger().setLevel(logging.INFO)
-    if('v' in conf and conf['v']): # Verbose
+    if('v' in conf and conf['v']):  # Verbose
         logging.getLogger().setLevel(logging.DEBUG)
         logging.info("Verbose mode.")
 
-    if not 'server' in conf or not conf['server'] or\
-            not 'port' in conf or not conf['port']:
+    if 'server' not in conf or not conf['server'] or\
+            'port' not in conf or not conf['port']:
         print("Missing argument(s): server address and/or port.")
         exit(1)
 
@@ -323,5 +346,6 @@ def main():
         bgProcess = ensureBackgroundCheckRun(bgProcess, conf)
         time.sleep(0.5)
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     main()

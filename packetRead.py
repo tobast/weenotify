@@ -19,12 +19,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import socket
 
 def read_int(data):
     """ Reads an integer at the beginning of [data], returns a pair of
     this integer and the remaining data. """
     return (int.from_bytes(data[:4], byteorder='big'), data[4:])
+
 
 def read_str(data):
     """ Reads a string at the beginning of [data], returns a pair of
@@ -32,10 +32,12 @@ def read_str(data):
     strLen, data = read_int(data)
     return (data[:strLen].decode('utf-8'), data[strLen:])
 
+
 def read_ptr(data):
     ptrLen = data[0]
     ptrData = data[1:ptrLen+1]
     return int(ptrData.decode('utf-8'), 16), data[ptrLen+1:]
+
 
 def read_tim(data):
     timLen = data[0]
@@ -43,21 +45,25 @@ def read_tim(data):
     strTim = data[:timLen].decode('utf-8')
     return (int(strTim), data[timLen:])
 
+
 def read_chr(data):
-    return (data[0],data[1:])
+    return (data[0], data[1:])
+
 
 def read_typ(data):
     return (data[:3].decode('utf-8'), data[3:])
 
+
 def read_arr(data):
-    elemType,data = read_typ(data)
+    elemType, data = read_typ(data)
     readFct = READ_FUNCTIONS[elemType]
-    nbElem,data = read_int(data)
+    nbElem, data = read_int(data)
     out = []
     for i in range(nbElem):
-        elt,data = readFct(data)
+        elt, data = readFct(data)
         out.append(elt)
-    return out,data
+    return out, data
+
 
 def read_hda(data):
     def buildKeysArray(keys):
@@ -66,11 +72,11 @@ def read_hda(data):
             pSplit = pair.split(':')
             out.append((pSplit[0], READ_FUNCTIONS[pSplit[1]]))
         return out
-    hpath,data = read_str(data)
+    hpath, data = read_str(data)
     hpathSplit = hpath.split('/')
-    keys,data = read_str(data)
+    keys, data = read_str(data)
     keysArray = buildKeysArray(keys)
-    count,data = read_int(data)
+    count, data = read_int(data)
     out = []
     for dataSet in range(count):
         curSet = dict()
@@ -80,9 +86,10 @@ def read_hda(data):
             path.append(ptr)
         curSet['__path'] = path
         for pair in keysArray:
-            curSet[pair[0]],data = pair[1](data)
+            curSet[pair[0]], data = pair[1](data)
         out.append(curSet)
-    return out,data
+    return out, data
+
 
 READ_FUNCTIONS = {
     'int': read_int,
@@ -94,4 +101,3 @@ READ_FUNCTIONS = {
     'arr': read_arr,
     'hda': read_hda,
 }
-
