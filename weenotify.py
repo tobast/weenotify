@@ -29,6 +29,7 @@ import socket
 import subprocess
 import time
 import threading
+import zlib
 
 import packetRead
 
@@ -86,10 +87,13 @@ class RelayClient(threading.Thread):
             self.process_packet(data)
 
     def process_packet(self, packet):
-        if packet[4] != 0:
-            logging.warning("Received compressed message. Ignoring.")
+        if packet[4] == 0x01:
+            body = zlib.decompress(packet[5:])
+        elif packet[4] == 0x00:
+            body = packet[5:]
+        else:
+            logging.warning("Unknown compression flag. Ignoring.")
             return
-        body = packet[5:]
         ident, body = packetRead.read_str(body)
         if ident in self.packet_actions:
             self.packet_actions[ident](body)
@@ -115,12 +119,13 @@ class RelayClient(threading.Thread):
 
     def init_connection(self):
         password = self.conf.get('password', None)
+        compression = self.conf.get('compression', 'off')
         if password is not None:
             self.sock.sendall(
-                'init compression=off,password={}\n'.format(password)
+                'init compression={},password={}\n'.format(compression, password)
                 .encode('utf-8'))
         else:
-            self.sock.sendall(b'init compression=off\n')
+            self.sock.sendall(b'init compression={}\n'.format(compression))
         self.sock.sendall(b'sync *\n')
         # Ask for name of buffers
         self.sock.sendall(b'(ask_buffers) hdata buffer:gui_buffers(*) name\n')
@@ -199,6 +204,8 @@ CONFIG_ITEMS = [
     ('-c', 'config', 'Use the given configuration file.', DEFAULT_CONF),
     ('-s', 'server', 'Address of the Weechat relay.'),
     ('-p', 'port', 'Port of the Weechat relay.'),
+    ('--compression', 'compression', 'Enable Weechat relay protocol data'
+        'compression.'),
     ('', 'ensure-background', 'Runs the following command in the background. '
         'Periodically checks whether it is still open, reruns it if '
         'necessary, and resets the connection to the server if it was lost '
