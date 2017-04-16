@@ -33,9 +33,9 @@ import zlib
 
 import packetRead
 
-''' ================= CONFIGURATION ========================== '''
+### ================= CONFIGURATION ========================== ###
 DEFAULT_CONF = (os.path.expanduser("~"))+'/.weenotifyrc'
-''' ================= END CONFIGURATION ====================== '''
+### ================= END CONFIGURATION ====================== ###
 
 
 def expandPaths(path):
@@ -45,7 +45,7 @@ def expandPaths(path):
 
 def safeCall(callArray):
     """ Runs an external program, catching exceptions """
-    if(len(callArray) == 0):
+    if len(callArray) == 0:
         logging.error("Trying to call an unspecified external program.")
         return
     try:
@@ -104,8 +104,8 @@ class RelayClient(threading.Thread):
         while True:
             try:
                 self.sock = socket.socket()
-                logging.info("Connecting to {}:{}...".format(
-                    self.conf['server'], self.conf['port']))
+                logging.info("Connecting to %s:%s..." %
+                             (self.conf['server'], self.conf['port']))
                 self.sock.connect((self.conf['server'],
                                    int(self.conf['port'])))
                 logging.info("Connected")
@@ -124,7 +124,8 @@ class RelayClient(threading.Thread):
         compression = self.conf.get('compression', 'off')
         if password is not None:
             self.sock.sendall(
-                'init compression={},password={}\n'.format(compression, password)
+                'init compression={},password={}\n'.format(compression,
+                                                           password)
                 .encode('utf-8'))
         else:
             self.sock.sendall(b'init compression={}\n'.format(compression))
@@ -145,7 +146,7 @@ class RelayClient(threading.Thread):
 
     def asked_buffers(self, body):
         data_type, body = packetRead.read_typ(body)
-        if(data_type != "hda"):
+        if data_type != "hda":
             logging.warning("Unknown asked_buffers format. Ignoring.")
             return
         hdaData, _ = packetRead.read_hda(body)
@@ -154,7 +155,7 @@ class RelayClient(threading.Thread):
 
     def buffer_line_added(self, body):
         data_type, body = packetRead.read_typ(body)
-        if(data_type != "hda"):
+        if data_type != "hda":
             logging.warning("Unknown buffer_line_added format. Ignoring.")
             return
         hdaData, _ = packetRead.read_hda(body)
@@ -206,19 +207,21 @@ CONFIG_ITEMS = [
     ('-c', 'config', 'Use the given configuration file.', DEFAULT_CONF),
     ('-s', 'server', 'Address of the Weechat relay.'),
     ('-p', 'port', 'Port of the Weechat relay.'),
-    ('--compression', 'compression', 'Enable Weechat relay protocol data'
-        'compression.'),
+    ('--compression', 'compression', 'Enable Weechat relay protocol data '
+                                     'compression.'),
     ('', 'ensure-background', 'Runs the following command in the background. '
-        'Periodically checks whether it is still open, reruns it if '
-        'necessary, and resets the connection to the server if it was lost '
-        'in the process. Mostly useful to establish a SSH tunnel.'),
+                              'Periodically checks whether it is still'
+                              'open, reruns it if necessary, and resets'
+                              ' the connection to the server if it was'
+                              ' lost in the process. Mostly useful '
+                              'to establish a SSH tunnel.'),
     ('', 'reconnect-delay', 'Delay between two attempts to reconnect after '
-        'being disconnected from the server.', '10'),
+                            'being disconnected from the server.', '10'),
     ('-a', 'highlight-action', 'Program to invoke when highlighted.'),
     ('', 'privmsg-action', 'Program to invoke when receiving a private '
-        'message.'),
+                           'message.'),
     ('', 'log-file', 'Log file. If omitted, the logs will be directly '
-        'printed.'),
+                     'printed.'),
     ('', 'password', 'Relay password')
     ]
 
@@ -234,20 +237,20 @@ def readConfig(path, createIfAbsent=False):
             for line in handle:
                 if '#' in line:
                     line = line[:line.index('#')].strip()
-                if(line == ''):
+                if line == '':
                     continue
 
                 if '=' in line:
                     eqPos = line.index('=')
                     attr = line[:eqPos].strip()
                     arg = line[eqPos+1:].strip()
-                    if(attr in confOpts):  # Valid option
+                    if attr in confOpts:  # Valid option
                         outDict[attr] = arg
                     else:
                         logging.warning('Unknown option: '+attr+'.')
             handle.close()
     except FileNotFoundError:
-        if(createIfAbsent):
+        if createIfAbsent:
             try:
                 open(path, 'x')
             except FileExistsError:
@@ -337,7 +340,7 @@ def main():
                         datefmt='%H:%M:%S', filename=conf['log-file'])
 
     logging.getLogger().setLevel(logging.INFO)
-    if('v' in conf and conf['v']):  # Verbose
+    if 'v' in conf and conf['v']:  # Verbose
         logging.getLogger().setLevel(logging.DEBUG)
         logging.info("Verbose mode.")
 
