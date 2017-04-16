@@ -39,10 +39,12 @@ DEFAULT_CONF = (os.path.expanduser("~"))+'/.weenotifyrc'
 
 
 def expandPaths(path):
+    """ Expands user directories in a path """
     return os.path.expanduser(path)
 
 
 def safeCall(callArray):
+    """ Runs an external program, catching exceptions """
     if(len(callArray) == 0):
         logging.error("Trying to call an unspecified external program.")
         return
@@ -222,6 +224,9 @@ CONFIG_ITEMS = [
 
 
 def readConfig(path, createIfAbsent=False):
+    """ Reads the configuration file at `path`, returning a dictionnary
+    containing the options found """
+
     outDict = dict()
     try:
         with open(path, 'r') as handle:
