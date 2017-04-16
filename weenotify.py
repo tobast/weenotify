@@ -33,9 +33,9 @@ import zlib
 
 import packetRead
 
-### ================= CONFIGURATION ========================== ###
+# ================= CONFIGURATION ========================== #
 DEFAULT_CONF = (os.path.expanduser("~"))+'/.weenotifyrc'
-### ================= END CONFIGURATION ====================== ###
+# ================= END CONFIGURATION ====================== #
 
 
 def expandPaths(path):
@@ -207,14 +207,8 @@ CONFIG_ITEMS = [
     ('-c', 'config', 'Use the given configuration file.', DEFAULT_CONF),
     ('-s', 'server', 'Address of the Weechat relay.'),
     ('-p', 'port', 'Port of the Weechat relay.'),
-    ('--compression', 'compression', 'Enable Weechat relay protocol data '
-                                     'compression.'),
-    ('', 'ensure-background', 'Runs the following command in the background. '
-                              'Periodically checks whether it is still'
-                              'open, reruns it if necessary, and resets'
-                              ' the connection to the server if it was'
-                              ' lost in the process. Mostly useful '
-                              'to establish a SSH tunnel.'),
+    ('--compression', 'compression', 'Enable Weechat relay protocol data'
+        'compression.'),
     ('', 'reconnect-delay', 'Delay between two attempts to reconnect after '
                             'being disconnected from the server.', '10'),
     ('-a', 'highlight-action', 'Program to invoke when highlighted.'),
@@ -297,26 +291,8 @@ def dictUnion(d1, d2):
     return out
 
 
-def ensureBackgroundCheckRun(proc, conf):
-    """ Runs (or re-runs if it has terminated) the 'ensure-background'
-        option command-line if it was specified. """
-    if 'ensure-background' not in conf or not conf['ensure-background']:
-        return
-
-    if proc is None or proc.poll() is not None:  # Not started or terminated
-        if proc is not None:  # Proc has died.
-            logging.warning("Background process has died.")
-        logging.info("Starting background process...")
-        proc = subprocess.Popen(shlex.split(conf['ensure-background']))
-        time.sleep(0.5)  # Wait a little to let it settle.
-    return proc
-
-
 def main():
     def sigint(sig, frame):
-        if bgProcess is not None:
-            bgProcess.terminate()
-            logging.info("Terminated background process.")
         logging.info("Stopped.")
         exit(0)
 
@@ -353,13 +329,9 @@ def main():
     signal.signal(signal.SIGTERM, sigint)
 
     client = RelayClient(conf)
-    bgProcess = ensureBackgroundCheckRun(None, conf)
 
     logging.info("Entering main loop.")
     client.start()
-    while True:
-        bgProcess = ensureBackgroundCheckRun(bgProcess, conf)
-        time.sleep(0.5)
 
 
 if __name__ == '__main__':
