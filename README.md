@@ -4,7 +4,7 @@ A minimalist Weechat client using the Weechat relay protocol to retrieve notific
 ## Disclaimer
 This program does not intend to be robust. That is, it will most certainly crash if you do not configure it properly, or feed it weird data. It does only intend to be a simply-written, working notification gatherer for Weechat.
 
-This program does only support *unencrypted* Weechat Relay protocol. That is, your password and IRC data *will be transmitted without encryption*. Thus, it is *most advised* to connect it to your Weechat Relay *through a SSH/SSL/anything-that-encrypts tunnel*. The `ensure-background` option (see below) makes it really easy, use it!
+This program does only support *unencrypted* Weechat Relay protocol. That is, your password and IRC data *will be transmitted without encryption*. Thus, it is *most advised* to connect it to your Weechat Relay *through a SSH/SSL/anything-that-encrypts tunnel*.
 
 ## Running
 
@@ -21,7 +21,6 @@ Each of these options can be passed, prefixed with `--`, directly through the co
 
 * `server`: address of the Weechat relay.
 * `port`: port of the Weechat relay.
-* `ensure-background`: runs the following command in the background. Periodically checks whether it is still open, reruns it if necessary, and resets the connection to the server if it was lost in the process. Mostly useful to establish a SSH tunnel: eg., to ensure that a SSH tunnel will be opened and closed with the application, set `ensure-background` to `ssh irc@example.com -o ServerAliveInterval=10 -L [LOCALPORT]:localhost:[RELAYPORT] -N` (note: the `-o` is essential to let you automatically reconnect when you loose the connection).
 * `reconnect-delay`: delay between two attempts to reconnect after being disconnected from the server.
 * `highlight-action`: program to invoke when highlighted. It will be called with the IRC line that triggered the highlight as its first argument, the message sender as its second argument, and the buffer name as its third.
 * `privmsg-action`:  program to invoke when receiving a private message. Has the same behavior as `highlight-action`.
