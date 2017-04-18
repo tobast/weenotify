@@ -31,6 +31,7 @@ import time
 import threading
 import zlib
 
+from notifications import notifysend
 import packetRead
 
 ### ================= CONFIGURATION ========================== ###
@@ -41,18 +42,6 @@ DEFAULT_CONF = (os.path.expanduser("~"))+'/.weenotifyrc'
 def expandPaths(path):
     """ Expands user directories in a path """
     return os.path.expanduser(path)
-
-
-def safeCall(callArray):
-    """ Runs an external program, catching exceptions """
-    if len(callArray) == 0:
-        logging.error("Trying to call an unspecified external program.")
-        return
-    try:
-        subprocess.call(shlex.split(callArray[0])+callArray[1:])
-    except:
-        logging.error("Could not execute "+callArray[0])
-
 
 class RelayClient(threading.Thread):
     def __init__(self, conf):
@@ -192,7 +181,6 @@ class RelayClient(threading.Thread):
 
         logging.debug("Notifying highlight message.")
         highlightProcessCmd = expandPaths(self.conf['highlight-action'])
-        safeCall([highlightProcessCmd, message, nick, buffer_name])
 
     def gotPrivMsg(self, message, nick, buffer_name):
         if not self.conf.get('privmsg-action', None):
@@ -200,7 +188,6 @@ class RelayClient(threading.Thread):
 
         logging.debug("Notifying private message.")
         privmsgProcessCmd = expandPaths(self.conf['privmsg-action'])
-        safeCall([privmsgProcessCmd, message, nick, buffer_name])
 
 
 CONFIG_ITEMS = [
