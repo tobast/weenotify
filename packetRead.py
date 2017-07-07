@@ -20,84 +20,117 @@
 """
 
 
-def read_int(data):
-    """ Reads an integer at the beginning of [data], returns a pair of
-    this integer and the remaining data. """
-    return (int.from_bytes(data[:4], byteorder='big'), data[4:])
+import zlib
 
 
-def read_str(data):
-    """ Reads a string at the beginning of [data], returns a pair of
-    this string and the remaining data. """
-    strLen, data = read_int(data)
-    return (data[:strLen].decode('utf-8'), data[strLen:])
+class PacketData:
+    '''  Handles the data from a relay packet and allows easy reading '''
+    def __init__(self, data):
+        self.data = data
 
 
-def read_ptr(data):
-    ptrLen = data[0]
-    ptrData = data[1:ptrLen+1]
-    return int(ptrData.decode('utf-8'), 16), data[ptrLen+1:]
+    def __len__(self):
+        return len(self.data)
 
 
-def read_tim(data):
-    timLen = data[0]
-    data = data[1:]
-    strTim = data[:timLen].decode('utf-8')
-    return (int(strTim), data[timLen:])
+    def append(self, data):
+        ''' Appends `data` to the data already contained in the packet '''
+        self.data += more
 
 
-def read_chr(data):
-    return (data[0], data[1:])
+    def decompress(self):
+        self.data = zlib.decompress(self.data)
 
 
-def read_typ(data):
-    return (data[:3].decode('utf-8'), data[3:])
-
-
-def read_arr(data):
-    elemType, data = read_typ(data)
-    readFct = READ_FUNCTIONS[elemType]
-    nbElem, data = read_int(data)
-    out = []
-    for i in range(nbElem):
-        elt, data = readFct(data)
-        out.append(elt)
-    return out, data
-
-
-def read_hda(data):
-    def buildKeysArray(keys):
-        out = []
-        for pair in keys.split(','):
-            pSplit = pair.split(':')
-            out.append((pSplit[0], READ_FUNCTIONS[pSplit[1]]))
+    def __extract__(self, size):
+        ''' Extracts the first `size` bytes of `self.data` and trucates
+        `self.data` accordingly. '''
+        out = self.data[:size]
+        self.data = self.data[size:]
         return out
-    hpath, data = read_str(data)
-    hpathSplit = hpath.split('/')
-    keys, data = read_str(data)
-    keysArray = buildKeysArray(keys)
-    count, data = read_int(data)
-    out = []
-    for dataSet in range(count):
-        curSet = dict()
-        path = []
-        for k in range(len(hpathSplit)):
-            ptr, data = read_ptr(data)
-            path.append(ptr)
-        curSet['__path'] = path
-        for pair in keysArray:
-            curSet[pair[0]], data = pair[1](data)
-        out.append(curSet)
-    return out, data
 
 
-READ_FUNCTIONS = {
-    'int': read_int,
-    'str': read_str,
-    'ptr': read_ptr,
-    'tim': read_tim,
-    'chr': read_chr,
-    'typ': read_typ,
-    'arr': read_arr,
-    'hda': read_hda,
-}
+    def read_int(self):
+        ''' Extracts an integer '''
+        return int.from_bytes(self.__extract__(4), byteorder='big')
+
+
+    def read_str(self):
+        ''' Extracts a string '''
+        strLen = self.read_int()
+        return self.__extract__(strLen).decode('utf-8')
+        # FIXME ^ what about errors?
+
+
+    def read_ptr(self):
+        ''' Extracts a pointer '''
+        ptrLen = self.__extract__(1)
+        ptrData = self.__extract__(ptrLen)
+        return int(ptrData.decode('utf-8'), 16)
+
+
+    def read_tim(self):
+        ''' Extracts a timestamp '''
+        timLen = self.__extract__(0)
+        strTim = self.__extract__(timLen).decode('utf-8')
+        return int(strTim)
+
+
+    def read_chr(self):
+        ''' Extracts a char '''
+        return self.__extract__(1)
+
+
+    def read_typ(self):
+        ''' Extracts a type '''
+        return self.__extract__(3).decode('utf-8')
+
+
+    def read_arr(self):
+        ''' Extracts an array '''
+        elemType = self.read_typ()
+        readFct = self.READ_FUNCTIONS[elemType]
+        nbElem = self.read_int()
+        out = []
+        for i in range(nbElem):
+            elt = readFct()
+            out.append(elt)
+        return out
+
+
+    def read_hda(self):
+        ''' Extracts some hda data '''
+        def buildKeysArray(keys):
+            out = []
+            for pair in keys.split(','):
+                pSplit = pair.split(':')
+                out.append((pSplit[0], READ_FUNCTIONS[pSplit[1]]))
+            return out
+        hpath = self.read_str()
+        hpathSplit = hpath.split('/')
+        keys = self.read_str()
+        keysArray = buildKeysArray(keys)
+        count = self.read_int()
+        out = []
+        for dataSet in range(count):
+            curSet = dict()
+            path = []
+            for k in range(len(hpathSplit)):
+                ptr = self.read_ptr()
+                path.append(ptr)
+            curSet['__path'] = path
+            for pair in keysArray:
+                curSet[pair[0]], data = pair[1](data)
+            out.append(curSet)
+        return out
+
+    READ_FUNCTIONS = {
+        'int': read_int,
+        'str': read_str,
+        'ptr': read_ptr,
+        'tim': read_tim,
+        'chr': read_chr,
+        'typ': read_typ,
+        'arr': read_arr,
+        'hda': read_hda,
+    }

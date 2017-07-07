@@ -29,9 +29,8 @@ import socket
 import subprocess
 import time
 import threading
-import zlib
 
-import packetRead
+from packetRead import PacketData
 
 # ================= CONFIGURATION ========================== #
 DEFAULT_CONF = (os.path.expanduser("~"))+'/.weenotifyrc'
@@ -70,35 +69,37 @@ class RelayClient(threading.Thread):
         self.connect()
         while True:
             READ_AT_ONCE = 4096
-            data = self.recv(READ_AT_ONCE)
+            data = PacketData(self.recv(READ_AT_ONCE))
             if len(data) < 5:
                 logging.warning("Packet shorter than 5 bytes received. "
                                 "Ignoring.")
                 continue
 
-            dataLen, _ = packetRead.read_int(data)
-            lastPacket = data
-            while len(data) < dataLen:
-                if len(lastPacket) < READ_AT_ONCE:
+            dataExpectedLen = data.read_int()
+            lastLen = len(data)
+            while len(data) < dataExpectedLen:
+                if lastLen < READ_AT_ONCE:
                     logging.warning("Incomplete packet received. Ignoring.")
                     break
-                lastPacket = self.recv(READ_AT_ONCE)
-                data += lastPacket
-            if len(data) < dataLen:
+                cData = self.recv(READ_AT_ONCE)
+                data.append(cData)
+                lastLen = len(cData)
+            if len(data) < dataExpectedLen:
                 continue
             self.process_packet(data)
 
     def process_packet(self, packet):
-        if packet[4] == 0x01:
-            body = zlib.decompress(packet[5:])
-        elif packet[4] == 0x00:
-            body = packet[5:]
+        compressionByte = packet.read_chr()
+        if compressionByte == 0x01:
+            packet.decompress()
+        elif compressionByte == 0x00:
+            pass
         else:
             logging.warning("Unknown compression flag. Ignoring.")
             return
-        ident, body = packetRead.read_str(body)
+        ident = packet.read_str()
         if ident in self.packet_actions:
-            self.packet_actions[ident](body)
+            self.packet_actions[ident](packet)
 
     def connect(self):
         while True:
@@ -144,21 +145,21 @@ class RelayClient(threading.Thread):
                 logging.error("Connection error: %s. Retrying..." % exn)
             self.connect()
 
-    def asked_buffers(self, body):
-        data_type, body = packetRead.read_typ(body)
+    def asked_buffers(self, packet):
+        data_type = packet.read_typ()
         if data_type != "hda":
             logging.warning("Unknown asked_buffers format. Ignoring.")
             return
-        hdaData, _ = packetRead.read_hda(body)
+        hdaData = packet.read_hda()
         for hda in hdaData:
             self.buffers[hda['__path'][-1]] = hda['name']
 
-    def buffer_line_added(self, body):
-        data_type, body = packetRead.read_typ(body)
+    def buffer_line_added(self, packet):
+        data_type = packet.read_typ()
         if data_type != "hda":
             logging.warning("Unknown buffer_line_added format. Ignoring.")
             return
-        hdaData, _ = packetRead.read_hda(body)
+        hdaData = packet.read_hda()
         for hda in hdaData:
             msg = hda['message']
             buffer = hda.get('buffer', 0)
