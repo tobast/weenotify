@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """
     WeeNotify
 
@@ -20,7 +20,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import argparse
 import logging
 import os
 import shlex
@@ -31,10 +30,7 @@ import time
 import threading
 
 from packetRead import PacketData
-
-# ================= CONFIGURATION ========================== #
-DEFAULT_CONF = (os.path.expanduser("~"))+'/.weenotifyrc'
-# ================= END CONFIGURATION ====================== #
+import readConf
 
 
 def expandPaths(path):
@@ -204,127 +200,28 @@ class RelayClient(threading.Thread):
         safeCall([privmsgProcessCmd, message, nick, buffer_name])
 
 
-CONFIG_ITEMS = [
-    ('-c', 'config', 'Use the given configuration file.', DEFAULT_CONF),
-    ('-s', 'server', 'Address of the Weechat relay.'),
-    ('-p', 'port', 'Port of the Weechat relay.'),
-    ('--compression', 'compression', 'Enable Weechat relay protocol data'
-        'compression.'),
-    ('', 'reconnect-delay', 'Delay between two attempts to reconnect after '
-                            'being disconnected from the server.', '10'),
-    ('-a', 'highlight-action', 'Program to invoke when highlighted.'),
-    ('', 'privmsg-action', 'Program to invoke when receiving a private '
-                           'message.'),
-    ('', 'log-file', 'Log file. If omitted, the logs will be directly '
-                     'printed.'),
-    ('', 'password', 'Relay password')
-    ]
-
-
-def readConfig(path, createIfAbsent=False):
-    """ Reads the configuration file at `path`, returning a dictionnary
-    containing the options found """
-
-    outDict = dict()
-    try:
-        with open(path, 'r') as handle:
-            confOpts = [x[1] for x in CONFIG_ITEMS]
-            for line in handle:
-                if '#' in line:
-                    line = line[:line.index('#')].strip()
-                if line == '':
-                    continue
-
-                if '=' in line:
-                    eqPos = line.index('=')
-                    attr = line[:eqPos].strip()
-                    arg = line[eqPos+1:].strip()
-                    if attr in confOpts:  # Valid option
-                        outDict[attr] = arg
-                    else:
-                        logging.warning('Unknown option: '+attr+'.')
-            handle.close()
-    except FileNotFoundError:
-        if createIfAbsent:
-            try:
-                open(path, 'x')
-            except FileExistsError:
-                pass  # That should not happen, but whatever.
-            except OSError as exn:
-                logging.error("Could not create {}: {}.".format(
-                    path, exn))
-        else:
-            logging.error("The configuration file '"+path+"' does not exists.")
-    except IOError:
-        logging.error("Could not read the configuration file at '"+path+"'.")
-    return outDict
-
-
-def readCommandLine():
-    parser = argparse.ArgumentParser(
-        description="WeeChat client to get highlight notifications from a "
-        "distant bouncer.")
-    parser.add_argument('-v', action='store_true')
-    for cfgItem in CONFIG_ITEMS:
-        shortOpt, longOpt, helpMsg, dft = \
-            cfgItem[0], cfgItem[1], cfgItem[2], None
-
-        if len(cfgItem) >= 4:
-            dft = cfgItem[3]
-        if shortOpt == '':
-            parser.add_argument('--'+longOpt, dest=longOpt, help=helpMsg,
-                                default=dft)
-        else:
-            parser.add_argument(shortOpt, '--'+longOpt, dest=longOpt,
-                                help=helpMsg, default=dft)
-    parsed = parser.parse_args()
-
-    parsedTable = vars(parsed)
-
-    return parsedTable
-
-
-def dictUnion(d1, d2):
-    out = d1
-    for key in d2.keys():
-        if d2[key] is not None or key not in d1:
-            out[key] = d2[key]
-    return out
-
-
 def main():
     def sigint(sig, frame):
         logging.info("Stopped.")
         exit(0)
 
-    # command line prevails
-    conf = readCommandLine()
-    conf = dictUnion(readConfig(conf['config'], True), conf)
+    conf = readConf.Configuration()
 
-    if 'log-file' not in conf:
-        conf['log-file'] = None
-    if conf['log-file'] is not None:
-        conf['log-file'] = expandPaths(conf['log-file'])
-    if conf['log-file'] is not None and not os.path.isfile(conf['log-file']):
+    if conf.logfile is not None and not os.path.isfile(conf['log-file']):
         try:
-            touchHandle = open(conf['log-file'], 'x')
+            touchHandle = open(conf.logfile, 'x')
             touchHandle.close()
         except:
             print("ERROR: failed to create log file. Exiting.")
             exit(1)
 
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
-                        datefmt='%H:%M:%S', filename=conf['log-file'])
+                        datefmt='%H:%M:%S', filename=conf.logfile)
 
     logging.getLogger().setLevel(logging.INFO)
-    if 'v' in conf and conf['v']:  # Verbose
+    if conf.isSet('v'):  # Verbose mode
         logging.getLogger().setLevel(logging.DEBUG)
         logging.info("Verbose mode.")
-
-    if 'server' not in conf or not conf['server'] or\
-            'port' not in conf or not conf['port']:
-        print("Missing argument(s): server address and/or port.")
-        exit(1)
 
     signal.signal(signal.SIGINT, sigint)
     signal.signal(signal.SIGTERM, sigint)
