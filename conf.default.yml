@@ -1,0 +1,20 @@
+## Default configuration for Weenotify
+
+# Domain name or IP address of the Weechat Relay server. Required.
+server: 'example.com'
+
+# Remote port on the server. Required.
+port: 6667
+
+# Relay password. Empty string for no password.
+password: ''
+
+# Use compression (yes/no). Defaults to yes.
+compression: yes
+
+# Delay between connection attempts when a connection fails for networking
+# issues, in seconds. Defaults to 10. -1 to prevent reconnection attempts.
+reconnect-delay: 10
+
+# Log file. Leave empty to log to stdout. Defaults to stdout.
+log-file: ''
